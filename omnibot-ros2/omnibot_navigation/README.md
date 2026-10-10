@@ -17,26 +17,38 @@ Nav2 stack with `slam_toolbox` 2-D SLAM and an optional RTAB-Map + OctoMap
 
 ```
 omnibot_navigation/
-├── config/
-│   ├── nav2_params.yaml          # Nav2 parameters (velocity caps match the driver)
-│   ├── robot_localization.yaml   # EKF state estimation
-│   ├── slam_toolbox_params.yaml  # 2-D SLAM
-│   ├── rtabmap_params.yaml       # RTAB-Map 3-D RGB-D SLAM
-│   ├── octomap_params.yaml       # OctoMap server (cloud → 2-D projected map)
-│   ├── sensor_integration.yaml   # Sensor frame/topic templates
-│   └── waypoints.yaml            # Default waypoints
-├── docs/
-│   └── SENSOR_INTEGRATION.md     # Sensor integration guide
-├── launch/
-│   ├── autonomous_robot.launch.py        # Top-level: base + description + EKF + SLAM + Nav2 (+ RViz)
-│   ├── autonomous_navigation.launch.py   # Nav2 stack only
-│   ├── autonomous_with_waypoints.launch.py
-│   ├── slam_toolbox.launch.py            # 2-D SLAM
-│   └── rtabmap.launch.py                 # Astra driver + RTAB-Map + OctoMap (3-D)
-├── scripts/
-│   ├── waypoint_navigator.py     # Waypoint navigation node
-│   └── test_autonomous.py        # Autonomous test sequence
-└── maps/                         # Saved maps (created at runtime)
+??? config/
+?   ??? nav2_params.yaml          # Nav2 parameters (DWB, holonomic; velocity caps match the driver)
+?   ??? robot_localization.yaml   # EKF state estimation
+?   ??? slam_toolbox_params.yaml  # 2-D SLAM
+?   ??? rtabmap_params.yaml       # RTAB-Map 3-D RGB-D SLAM
+?   ??? octomap_params.yaml       # OctoMap server (cloud ? 2-D projected map)
+?   ??? sensor_integration.yaml   # Sensor frame/topic templates
+?   ??? waypoints.yaml            # Named waypoints (kitchen, desk, door) in the sim map frame
+??? docs/
+?   ??? SENSOR_INTEGRATION.md     # Sensor integration guide
+?   ??? nav_sim_runs_local.jsonl  # Time-to-goal results of the local Gazebo runs
+?   ??? nav_sim_runs_local_log.txt
+??? launch/
+?   ??? autonomous_robot.launch.py        # Top-level: base + description + EKF + SLAM + Nav2 (+ RViz)
+?   ??? autonomous_navigation.launch.py   # Nav2 stack only
+?   ??? autonomous_with_waypoints.launch.py
+?   ??? slam_toolbox.launch.py            # 2-D SLAM (lifecycle node, auto-activated)
+?   ??? sim_mapping.launch.py             # Gazebo apartment + slam_toolbox (+ scripted sweep)
+?   ??? sim_navigation.launch.py          # Gazebo apartment + map_server + AMCL + Nav2
+?   ??? rtabmap.launch.py                 # Astra driver + RTAB-Map + OctoMap (3-D)
+??? maps/                         # Saved apartment sim map (yaml, pgm, posegraph); see maps/README.md
+??? scripts/
+?   ??? waypoint_navigator.py     # Waypoint navigation node (`route` param picks names)
+?   ??? waypoint_loader.py        # Waypoint YAML loader/validator (no ROS)
+?   ??? go_to_waypoint.py         # CLI: Nav2 to a named waypoint, reports time-to-goal
+?   ??? sim_map_sweep.py          # Scripted mapping sweep for the sim
+?   ??? generate_sim_map.sh       # Regenerate maps/apartment.*
+?   ??? run_nav_scenarios.sh      # Gazebo scenarios, fresh sim per run
+?   ??? summarize_nav_results.py  # Markdown table from the scenario results
+?   ??? render_map_overlay.py     # PNG of the map with the waypoints
+?   ??? test_autonomous.py        # Autonomous test sequence
+??? test/                         # ROS-free checks + the Gazebo scenario test
 ```
 
 This is an `ament_cmake` package (`CMakeLists.txt` + `package.xml`); the Python
@@ -84,15 +96,42 @@ Set navigation goals from RViz with the **2D Nav Goal** tool, or send a
 ros2 launch omnibot_navigation autonomous_with_waypoints.launch.py
 ```
 
-The `waypoint_navigator` node loads `config/waypoints.yaml` and drives the robot
-through the listed poses via the Nav2 `navigate_to_pose` /
-`navigate_through_poses` actions.
+The `waypoint_navigator` node loads the named waypoints in `config/waypoints.yaml`
+(map frame) and drives the robot through them with one Nav2
+`navigate_through_poses` goal. The shipped poses are for the simulated apartment
+map, not for a real room.
 
 | `waypoint_navigator` param | Default |
 |---|---|
 | `waypoint_file` | `waypoints.yaml` |
+| `route` | `""` (all waypoints, file order) |
 | `loop_waypoints` | `false` |
 | `waypoint_timeout` | `30.0` s |
+
+### Gazebo simulation (apartment world)
+
+Simulation only; needs ROS 2 Jazzy and Gazebo Harmonic (see the root
+[README](../../README.md#nav2--slam_toolbox-in-gazebo-ohh-30) for the evidence and the time-to-goal table).
+
+```bash
+# 2-D SLAM in the apartment world; drive by hand or add sweep:=true for the scripted route
+ros2 launch omnibot_navigation sim_mapping.launch.py
+# Regenerate the checked-in map (maps/apartment.*), see maps/README.md
+scripts/generate_sim_map.sh
+# Nav2 + AMCL on the saved map, then a named goal from config/waypoints.yaml
+ros2 launch omnibot_navigation sim_navigation.launch.py
+ros2 run omnibot_navigation go_to_waypoint.py kitchen desk door
+# The scenario test: fresh sim per run, fails if a waypoint is not reached in 60 s
+scripts/run_nav_scenarios.sh --repeat 5 kitchen desk door
+```
+
+`autonomous_with_waypoints.launch.py` (and its `route:=kitchen,desk,door` argument)
+starts `autonomous_robot.launch.py`, which brings up the real Yahboom base driver.
+Do not use it in simulation; use `sim_navigation.launch.py` plus `go_to_waypoint.py`.
+
+Goal tolerance: Nav2's goal checker uses 0.15 m and 0.20 rad
+(`general_goal_checker` in `config/nav2_params.yaml`). The scenario test also
+checks the final ground-truth pose against `/odom` within 0.30 m and 0.50 rad.
 
 ### 2-D SLAM only
 

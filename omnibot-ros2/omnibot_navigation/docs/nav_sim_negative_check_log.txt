@@ -1,0 +1,19 @@
+=== run 1/1: kitchen ===
+NAV_RESULT {"elapsed_sim_s": 5.0, "final_error_xy_m": 1.093, "final_error_yaw_rad": 2.841, "final_pose": {"x": -0.887, "y": 0.288, "yaw": -0.3}, "goal": {"x": -1.9, "y": 0.7, "yaw": 3.1416}, "reason": "not reached within 5 s", "scenario": "kitchen", "start_pose": {"x": 0.0, "y": 0.0, "yaw": -0.0}, "success": false, "time_to_goal_s": null, "timeout_s": 5.0, "waypoint": "kitchen", "xy_tolerance_m": 0.3, "yaw_tolerance_rad": 0.5}
+EVIDENCE scenario=kitchen success=False time_to_goal_s=None final_error_xy_m=1.093 (limit 5 s, 0.3 m, 0.5 rad)
+FAIL
+FAIL: test_reaches_waypoint_from_start_pose (test_nav_sim_scenarios.TestNavScenario.test_reaches_waypoint_from_start_pose)
+Ran 1 test in 10.474s
+FAILED (failures=1)
+Ran 0 tests in 0.000s
+run 1 kitchen: launch_test exited 1
+
+| Run | Scenario | Result | Time to goal (sim s) | Wall s | Final xy error (m) | Final yaw error (rad) |
+|---|---|---|---|---|---|---|
+| 1 | kitchen | FAIL: not reached within 5 s | - | - | 1.09 | 2.84 |
+
+| Scenario | Runs | Passed | Time to goal min / median / max (sim s) |
+|---|---|---|---|
+| kitchen | 1 | 0 | - |
+nav scenarios: 1 failure(s)
+exit 1

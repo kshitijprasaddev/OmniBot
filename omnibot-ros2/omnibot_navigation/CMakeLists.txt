@@ -20,6 +20,16 @@ install(DIRECTORY
 install(PROGRAMS
   scripts/waypoint_navigator.py
   scripts/test_autonomous.py
+  scripts/go_to_waypoint.py
+  scripts/sim_map_sweep.py
+  scripts/generate_sim_map.sh
+  scripts/run_nav_scenarios.sh
+  DESTINATION lib/${PROJECT_NAME}
+)
+# Importable helpers that the scripts above load from their own directory.
+install(FILES
+  scripts/waypoint_loader.py
+  scripts/summarize_nav_results.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -30,6 +40,27 @@ if(BUILD_TESTING)
   set(ament_cmake_copyright_FOUND TRUE)
   set(ament_cmake_cpplint_FOUND TRUE)
   ament_lint_auto_find_test_dependencies()
+
+  # ROS-free checks: waypoints, Nav2 holonomic params, saved map consistency.
+  find_package(ament_cmake_pytest REQUIRED)
+  ament_add_pytest_test(test_waypoints test/test_waypoints.py TIMEOUT 60)
+  ament_add_pytest_test(test_nav_assets test/test_nav_assets.py TIMEOUT 60)
+  ament_add_pytest_test(test_nav_results test/test_nav_results.py TIMEOUT 60)
+
+  # Headless Gazebo scenarios. The nav-sim CI job exports OMNIBOT_NAV_SIM=1
+  # before configure; the default colcon test job does not, so it does not
+  # start Gazebo. One test per scenario so each starts from the spawn pose.
+  if("$ENV{OMNIBOT_NAV_SIM}" STREQUAL "1")
+    find_package(launch_testing_ament_cmake REQUIRED)
+    foreach(scenario kitchen desk door)
+      add_launch_test(
+        test/test_nav_sim_scenarios.py
+        TARGET nav_sim_${scenario}
+        TIMEOUT 600
+        ENV OMNIBOT_NAV_SCENARIO=${scenario}
+      )
+    endforeach()
+  endif()
 endif()
 
 ament_package()

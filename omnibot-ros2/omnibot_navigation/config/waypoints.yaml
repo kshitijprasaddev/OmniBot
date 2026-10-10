@@ -1,55 +1,61 @@
+# Named waypoints for the apartment world (omnibot_bringup/worlds/apartment.sdf).
+#
+# All poses are in the `map` frame of the checked-in simulation map
+# maps/apartment.yaml. That map was built by slam_toolbox with the robot
+# starting at the Gazebo world origin, facing +X, so the `map` frame and the
+# Gazebo world frame coincide (see maps/README.md).
+#
+# Orientation is a quaternion (x, y, z, w); `yaw_deg` is the same heading in
+# degrees and is only for readers. scripts/waypoint_loader.py checks that the
+# two agree. Names are looked up case-sensitively by:
+#   - scripts/go_to_waypoint.py   (ros2 run omnibot_navigation go_to_waypoint.py kitchen)
+#   - scripts/waypoint_navigator.py (param `route`)
+#   - test/test_nav_sim_scenarios.py (the Gazebo integration test)
+frame_id: map
+
+# Robot spawn pose in sim.launch.py. AMCL starts from this pose in
+# sim_navigation.launch.py.
+initial_pose:
+  x: 0.0
+  y: 0.0
+  yaw_deg: 0.0
+
 waypoints:
-  - name: "start"
+  # In front of the kitchen counter (west wall), facing the counter.
+  - name: "kitchen"
+    yaw_deg: 180.0
     position:
-      x: 0.0
-      y: 0.0
+      x: -1.9
+      y: 0.7
       z: 0.0
     orientation:
       x: 0.0
       y: 0.0
-      z: 0.0
-      w: 1.0
-  
-  - name: "waypoint_1"
+      z: 1.0
+      w: 0.0
+
+  # South of the desk (east side), facing the desk.
+  - name: "desk"
+    yaw_deg: 90.0
     position:
-      x: 1.0
-      y: 0.0
+      x: 2.55
+      y: -0.45
       z: 0.0
     orientation:
       x: 0.0
       y: 0.0
-      z: 0.0
-      w: 1.0
-  
-  - name: "waypoint_2"
+      z: 0.7071068
+      w: 0.7071068
+
+  # Inside the room in front of the south-wall door opening, facing the door.
+  - name: "door"
+    yaw_deg: -90.0
     position:
-      x: 1.0
-      y: 1.0
+      x: -0.3
+      y: -1.45
       z: 0.0
     orientation:
       x: 0.0
       y: 0.0
-      z: 0.0
-      w: 1.0
-  
-  - name: "waypoint_3"
-    position:
-      x: 0.0
-      y: 1.0
-      z: 0.0
-    orientation:
-      x: 0.0
-      y: 0.0
-      z: 0.0
-      w: 1.0
-  
-  - name: "return_home"
-    position:
-      x: 0.0
-      y: 0.0
-      z: 0.0
-    orientation:
-      x: 0.0
-      y: 0.0
-      z: 0.0
-      w: 1.0
+      z: -0.7071068
+      w: 0.7071068

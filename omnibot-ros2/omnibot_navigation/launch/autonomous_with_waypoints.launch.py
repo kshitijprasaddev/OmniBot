@@ -8,6 +8,7 @@ from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -19,6 +20,7 @@ def generate_launch_description():
     use_waypoints = LaunchConfiguration("use_waypoints")
     waypoint_file = LaunchConfiguration("waypoint_file")
     loop_waypoints = LaunchConfiguration("loop_waypoints")
+    route = LaunchConfiguration("route")
 
     # Declare the launch arguments
     declare_use_sim_time_cmd = DeclareLaunchArgument(
@@ -45,6 +47,15 @@ def generate_launch_description():
         description="Whether to loop through waypoints continuously",
     )
 
+    declare_route_cmd = DeclareLaunchArgument(
+        "route",
+        default_value="",
+        description=(
+            "Comma-separated waypoint names to visit in order, e.g. "
+            "'kitchen,desk,door'. Empty visits every waypoint in the file."
+        ),
+    )
+
     # Include autonomous robot launch
     autonomous_robot = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -64,6 +75,7 @@ def generate_launch_description():
                 "use_sim_time": use_sim_time,
                 "waypoint_file": waypoint_file,
                 "loop_waypoints": loop_waypoints,
+                "route": ParameterValue(route, value_type=str),
             }
         ],
         condition=IfCondition(use_waypoints),
@@ -77,6 +89,7 @@ def generate_launch_description():
     ld.add_action(declare_use_waypoints_cmd)
     ld.add_action(declare_waypoint_file_cmd)
     ld.add_action(declare_loop_waypoints_cmd)
+    ld.add_action(declare_route_cmd)
 
     # Add the actions to launch all of the navigation nodes
     ld.add_action(autonomous_robot)

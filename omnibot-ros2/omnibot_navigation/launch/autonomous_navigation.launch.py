@@ -26,6 +26,8 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.descriptions import ParameterValue
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
@@ -33,8 +35,17 @@ def generate_launch_description():
     default_params = os.path.join(pkg_nav, "config", "nav2_params.yaml")
 
     use_sim_time = LaunchConfiguration("use_sim_time")
-    params_file = LaunchConfiguration("params_file")
     autostart = LaunchConfiguration("autostart")
+    bond_timeout = LaunchConfiguration("bond_timeout")
+
+    # Nav2 costmaps are sub-nodes of controller_server / planner_server and read
+    # their own use_sim_time from the file, so the launch-level override alone
+    # does not reach them. Rewrite every use_sim_time in the YAML instead.
+    params_file = RewrittenYaml(
+        source_file=LaunchConfiguration("params_file"),
+        param_rewrites={"use_sim_time": use_sim_time},
+        convert_types=True,
+    )
 
     nav2_managed_nodes = [
         "controller_server",
@@ -97,6 +108,7 @@ def generate_launch_description():
         parameters=[
             {"use_sim_time": use_sim_time},
             {"autostart": autostart},
+            {"bond_timeout": ParameterValue(bond_timeout, value_type=float)},
             {"node_names": nav2_managed_nodes},
         ],
     )
@@ -117,6 +129,12 @@ def generate_launch_description():
                 "autostart",
                 default_value="true",
                 description="Auto-activate lifecycle nodes on launch",
+            ),
+            DeclareLaunchArgument(
+                "bond_timeout",
+                default_value="4.0",
+                description="Lifecycle bond timeout in s; 0.0 disables bond checks "
+                "(used in CPU-starved headless CI)",
             ),
             controller_server,
             planner_server,
