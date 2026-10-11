@@ -174,7 +174,8 @@ class WaypointGoalClient(Node):
         sim_start = self.sim_seconds()
         wall_start = time.monotonic()
         result_future = handle.get_result_async()
-        wall_limit = max(4.0 * timeout_s, timeout_s + 120.0)
+        # Wall guard only (sim-time limit is timeout_s). Headless CI can run <<1x RTF.
+        wall_limit = max(12.0 * timeout_s, timeout_s + 540.0)
         timed_out = False
         while not result_future.done():
             rclpy.spin_once(self, timeout_sec=0.05)

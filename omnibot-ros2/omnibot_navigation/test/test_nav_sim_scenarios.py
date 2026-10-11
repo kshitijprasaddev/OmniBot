@@ -85,8 +85,8 @@ class TestNavScenario(unittest.TestCase):
         waypoint = load_waypoints()[SCENARIO]
 
         self.assertTrue(
-            self.node.wait_until_ready(240.0),
-            "sim, TF map->base_link, or Nav2 lifecycle did not become ready in 240 s",
+            self.node.wait_until_ready(360.0),
+            "sim, TF map->base_link, or Nav2 lifecycle did not become ready in 360 s",
         )
         truth = self.node.ground_truth()
         self.assertIsNotNone(truth, "no /odom before the goal was sent")
