@@ -29,11 +29,19 @@
   </p>
 </div>
 
-OmniBot is OhhO Robotics' mecanum-wheel mobile manipulator. This repository holds the ROS 2 packages linked from [`src/`](src/), the [wheel kinematics](mecanum-kinematics/), the [Yahboom board protocol](yahboom-python-driver/), the [Quest project](omnibot-vr/), and the [Android app](omnibot-android/). The photos and GIFs above are the files in [`assets/`](assets/).
+<p align="center"><strong>An open-source ROS 2 Jazzy mobile manipulator (mecanum base + SO-101 arm) that you can run in simulation on a laptop in three commands, then build at home.</strong></p>
 
-## CPU-only demo
+<p align="center">⭐ <strong>If OmniBot is useful or interesting to you, please star the repo</strong>: it helps other robotics people find it.</p>
 
-No robot and no GPU. [`ohho-os` 1.1.2](https://pypi.org/project/ohho-os/1.1.2/) is on PyPI under [Apache-2.0](https://github.com/ohho-robotics/ohho-sdk/blob/main/LICENSE). `ohho doctor` and `ohho sim` are implemented in [`ohho/cli.py`](https://github.com/ohho-robotics/ohho-sdk/blob/main/ohho/cli.py); the sim adapter is [`ohho/adapters/sim.py`](https://github.com/ohho-robotics/ohho-sdk/blob/main/ohho/adapters/sim.py). The docs-test job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs these three commands in a fresh virtualenv via [`scripts/docs_test_readme.py`](scripts/docs_test_readme.py).
+## Why OmniBot
+
+- **Full mobile-manipulation stack in one repo**: mecanum base driver and kinematics, SO-101 arm with e-stop and joint-limit safety, Nav2/SLAM, Gazebo Harmonic sim, and LeRobot data capture feeding VLA/RL policies.
+- **Teleop from anywhere**: Xbox gamepad, Android app, Meta Quest VR, or the browser via rosbridge.
+- **Honest and tested**: README commands run in CI. Anything that needs a robot or GPU is labelled as such in [docs/reference.md](docs/reference.md).
+
+## Quickstart (no robot, no GPU)
+
+[`ohho-os`](https://pypi.org/project/ohho-os/) is on PyPI under [Apache-2.0](https://github.com/ohho-robotics/ohho-sdk/blob/main/LICENSE). The docs-test job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs these three commands in a fresh virtualenv via [`scripts/docs_test_readme.py`](scripts/docs_test_readme.py).
 
 <!-- docs-test: cpu -->
 ```bash
@@ -42,9 +50,9 @@ ohho doctor
 ohho sim --robot omnibot --seconds 2
 ```
 
-## ROS 2 path
+## Build the ROS 2 workspace
 
-Ubuntu 24.04 with ROS 2 Jazzy already installed. The symlinks in [`src/`](src/) are the colcon workspace. The `ros` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs this block on `ros:jazzy-ros-base-noble`. The docs-test job skips it.
+Ubuntu 24.04 with ROS 2 Jazzy already installed. The symlinks in [`src/`](src/) are the colcon workspace. The `ros` CI job runs this block on `ros:jazzy-ros-base-noble`.
 
 <!-- docs-test: skip ros -->
 ```bash
@@ -66,32 +74,9 @@ colcon test --base-paths src --event-handlers console_direct+ --return-code-on-t
 colcon test-result --verbose
 ```
 
-## Needs hardware / needs GPU
+Then start the Gazebo sim with `ros2 launch omnibot_bringup sim.launch.py world:=flat`. See [docs/reference.md](docs/reference.md) for worlds, bridged topics and browser teleop.
 
-| Feature | Needs | Evidence |
-|---|---|---|
-| `ohho sim --robot omnibot` | Neither | [ohho-os 1.1.2](https://pypi.org/project/ohho-os/1.1.2/) and the docs-test job in [ci.yml](.github/workflows/ci.yml) |
-| Colcon build and test of `src/` | Neither | [src/](src/) and the `ros` job in [ci.yml](.github/workflows/ci.yml). That job needs ROS 2 Jazzy. |
-| Kinematics, Yahboom codec, BEV homography, arm tick math, arm command safety (joint limits, 0.15 rad/cycle, 200 ms hold, e-stop torque latch), policy inference guards (black/missing frame refusal, latency drop, 0.15 rad/cycle arm clamp), learning engine, agent engine | Neither | The `cpu` job in [ci.yml](.github/workflows/ci.yml) runs `pytest omnibot-ros2/omnibot_arm/test omnibot-ai-ros2/omnibot_lerobot/test`. Those tests do not start ROS or the arm. |
-| Xbox teleop, cameras, arm, LeRobot recording | Robot | [robot_with_joy.launch.py](omnibot-ros2/omnibot_bringup/launch/robot_with_joy.launch.py), [perception.launch.py](omnibot-ros2/omnibot_bringup/launch/perception.launch.py), [arm.launch.py](omnibot-ros2/omnibot_arm/launch/arm.launch.py), [teleop_record.launch.py](omnibot-ai-ros2/omnibot_lerobot/launch/teleop_record.launch.py) |
-| Nav2 and SLAM on the real robot | Robot | [omnibot_navigation](omnibot-ros2/omnibot_navigation/). Not run on hardware for this change. |
-| Nav2 + `slam_toolbox` in the Gazebo apartment world | Neither | [Nav2 + slam_toolbox in Gazebo](#nav2--slam_toolbox-in-gazebo-ohh-30), the [`nav-sim`](.github/workflows/nav-sim.yml) workflow, and the committed [run log](omnibot-ros2/omnibot_navigation/docs/nav_sim_runs_local_log.txt). Needs ROS 2 Jazzy and Gazebo Harmonic. |
-| Gazebo compose files | Neither | [docker-compose.yml](omnibot-digital-twin/docker/docker-compose.yml) runs headless Gazebo. [docker-compose.gpu.yml](omnibot-digital-twin/docker/docker-compose.gpu.yml) is an optional NVIDIA overlay. The docs-test job does not start compose. |
-| Gazebo Harmonic `sim.launch.py` | Neither | [sim.launch.py](omnibot-ros2/omnibot_bringup/launch/sim.launch.py) and the `sim-smoke` job in [ci.yml](.github/workflows/ci.yml). That job needs ROS 2 Jazzy and Gazebo Harmonic. The launch does not exit, so docs-test skips it. |
-| OpenVLA / SmolVLA weights | GPU | [vla_engine/README.md](omnibot-ai-engines/vla_engine/README.md) and [requirements.txt](omnibot-ai-engines/vla_engine/requirements.txt) (`torch`) |
-| Isaac Lab RL | GPU | [rl_engine/README.md](omnibot-ai-engines/rl_engine/README.md) and [requirements.txt](omnibot-ai-engines/rl_engine/requirements.txt) (`isaaclab`, `onnxruntime-gpu`) |
-| Android controller | Robot | [omnibot-android/](omnibot-android/). Building it needs the Android SDK and JDK 17 ([`build.gradle.kts`](omnibot-android/build.gradle.kts)), which is separate from a desktop GPU. |
-| Quest teleop | Robot | [omnibot-vr/](omnibot-vr/). Unity **6000.5.2f1** is pinned in [`ProjectSettings/ProjectVersion.txt`](omnibot-vr/ProjectSettings/ProjectVersion.txt). |
-
-## Arm command safety
-
-`arm_driver_node` drops follower torque when `/emergency_stop` is true (`Torque_Enable` 0) and leaves it off when the stop clears, until a later `/arm/enable` true arrives while the stop is false. An enable message received during the stop does not re-enable torque. If `/arm/joint_commands/out` is silent for `command_timeout_sec` (0.2 s) the driver holds the last accepted joint command and logs that once. Each accepted target is clamped to `joint_min` / `joint_max` and to `max_joint_delta_rad` per cycle. The shared default is `MAX_JOINT_DELTA_RAD` (0.15 rad) in [`omnibot-ros2/omnibot_arm/scripts/arm_safety.py`](omnibot-ros2/omnibot_arm/scripts/arm_safety.py). OHH-100 reuses that constant in `policy_node`. The Yahboom base controller already zeros velocity on `/emergency_stop`; this change does not modify that node.
-
-In `policy_node`, inference guards enforce that missing or black camera frames (wrist or BEV) refuse publication with a throttled warning, actions from `select_action` taking longer than the policy period (1 / `policy_hz`) are dropped as stale, and arm command deltas are clamped to the same `MAX_JOINT_DELTA_RAD` (0.15 rad/cycle) limit as the driver.
-
-The decisions above are unit-tested without ROS and without the arm (`pytest omnibot-ros2/omnibot_arm/test omnibot-ai-ros2/omnibot_lerobot/test`). Feetech bus writes, `ros2 launch`, and real model inference on hardware were not run for this behavior. Position servos only; there is no force control.
-
-The launch files below target the physical robot. Docs-test skips them.
+On the physical robot (docs-test skips this):
 
 <!-- docs-test: skip hardware -->
 ```bash
@@ -100,41 +85,6 @@ ros2 launch omnibot_bringup perception.launch.py
 ros2 launch omnibot_arm arm.launch.py
 ros2 launch omnibot_lerobot teleop_record.launch.py
 ```
-
-## Gazebo Harmonic simulation
-
-One command starts Gazebo Harmonic, spawns `omnibot_description`, and bridges the base. The default is headless (`gui:=false`), which is what the `sim-smoke` job runs. The launch does not exit, so docs-test skips it.
-
-<!-- docs-test: skip ros -->
-```bash
-source /opt/ros/jazzy/setup.bash
-source install/setup.bash
-ros2 launch omnibot_bringup sim.launch.py world:=flat
-```
-
-`world:=apartment` loads a single room with a kitchen (counter, stove, fridge), a desk, and a door. Launch file: [`omnibot-ros2/omnibot_bringup/launch/sim.launch.py`](omnibot-ros2/omnibot_bringup/launch/sim.launch.py). The mecanum chassis is driven in the plane (`drive:=planar` by default; `drive:=mecanum` selects the MecanumDrive plugin). Sensors in this launch are a 2D lidar, the front RGB camera, and the IMU.
-
-`ros_gz_bridge` topics. `rosbridge:=true` (the default) also starts `rosbridge_websocket` on port 9090. The sim-smoke test passes `rosbridge:=false` and does not start rosbridge:
-
-| Topic | Type |
-|---|---|
-| `/cmd_vel` | `geometry_msgs/msg/Twist` |
-| `/odom` | `nav_msgs/msg/Odometry` |
-| `/scan` | `sensor_msgs/msg/LaserScan` |
-| `/imu` | `sensor_msgs/msg/Imu` |
-| `/camera/front/image_raw` | `sensor_msgs/msg/Image` |
-| `/camera/front/camera_info` | `sensor_msgs/msg/CameraInfo` |
-| `/tf` (`odom` -> `base_footprint`, added for Nav2 and `slam_toolbox`) | `tf2_msgs/msg/TFMessage` |
-
-Bridge config: [`omnibot-ros2/omnibot_bringup/config/sim_bridge.yaml`](omnibot-ros2/omnibot_bringup/config/sim_bridge.yaml).
-
-The headless launch test [`omnibot-ros2/omnibot_bringup/test/test_sim_launch.py`](omnibot-ros2/omnibot_bringup/test/test_sim_launch.py) checks that `/odom`, `/scan`, `/imu`, and `/camera/front/image_raw` publish within 30 s and that `/cmd_vel` moves the robot at least 0.2 m. The `sim-smoke` job in [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs it on `ros:jazzy`.
-
-Eight frames from `/camera/front/image_raw` saved by that test (`OMNIBOT_SIM_FRAME_DIR`) while it published `/cmd_vel` in `world:=flat`. The red box is the `marker` model in [`flat.sdf`](omnibot-ros2/omnibot_bringup/worlds/flat.sdf):
-
-<p align="center">
-  <img src="assets/omnibot_gazebo_flat.gif" width="320" alt="Front camera frames from the flat Gazebo world while the robot drives"/>
-</p>
 
 ## Nav2 + slam_toolbox in Gazebo (OHH-30)
 
@@ -194,19 +144,7 @@ Changes to [`nav2_params.yaml`](omnibot-ros2/omnibot_navigation/config/nav2_para
 
 Not covered: `drive:=mecanum` (wheel-physics) with Nav2 was tried once and the `map` frame never appeared before Nav2's startup timeout, so `sim_navigation.launch.py` uses the planar holonomic drive only. The 3-D RTAB-Map stack, real-robot SLAM/Nav2, and bags are untouched.
 
-## Teleop from the website
-
-[OHH-89](https://linear.app/ohho-robotics/issue/OHH-89) is the website issue for Connect. Start the flat Gazebo world, then open Connect and set the ROSBridge URL to `ws://localhost:9090`. rosbridge listens on localhost only by default; `rosbridge_address:=0.0.0.0` exposes it on the network without authentication. The launch does not exit, so the docs-test job skips this fence.
-
-<!-- docs-test: skip ros -->
-```bash
-# omnibot-docs-test: skip ros
-ros2 launch omnibot_bringup sim.launch.py world:=flat
-```
-
-`/cmd_vel` moves the base, `/odom` publishes, and `/camera/front/image_raw` publishes when the camera sensor starts. `world:=apartment` stays the furnished world.
-
-The requirement files below pull GPU stacks. Docs-test skips them.
+GPU policy stacks (OpenVLA / SmolVLA, Isaac Lab RL) need a desktop NVIDIA GPU, not the Raspberry Pi:
 
 <!-- docs-test: skip gpu -->
 ```bash
@@ -214,11 +152,70 @@ pip install -r omnibot-ai-engines/vla_engine/requirements.txt
 pip install -r omnibot-ai-engines/rl_engine/requirements.txt
 ```
 
-## Bring-up control mode
+## Hardware (bill of materials)
 
-`mobile_manipulation.launch.py` starts `cmd_vel_mux` and `arm_cmd_mux` in `teleop`. `/cmd_vel/teleop` is forwarded. Nav2, VLA, and RL base commands, and both arm command sources, are not forwarded until `/control_mode` is `vla`, `nav2`, or `rl_nav`. Setting `/control_mode` back to `teleop` stops the autonomous base and arm streams on that callback and still forwards `/cmd_vel/teleop`. Publishing `/emergency_stop` true stops base and arm outputs, including teleop, on that callback. `/arm/joint_commands` is shared by the policy and the Android app, so Android joint commands wait for an autonomous mode as well.
+These are the parts referenced in this repo's code and docs. Prices are not yet documented. Help fill them in via [#19](https://github.com/ohho-robotics/OmniBot/issues/19).
 
-`hybrid_robot.launch.py` and `omnibot_pi.launch.py` still pass `default_mode:=nav2` for the base mux. This gate was unit-tested here without ROS 2. It was not run with `ros2 launch`, Gazebo, or a robot.
+| Part | Qty | Where it is referenced | Approx. price |
+|---|---|---|---|
+| Mecanum chassis with 4 wheels (80 mm diameter, 0.215 m × 0.165 m wheel spacing) | 1 | [`mecanum-kinematics/config/mecanum_params.yaml`](mecanum-kinematics/config/mecanum_params.yaml) | TBD |
+| Yahboom motor driver board (motors, wheel encoders, onboard IMU; USB serial 115200) | 1 | [`yahboom-python-driver/`](yahboom-python-driver/), [sensor guide](omnibot-ros2/omnibot_navigation/docs/SENSOR_INTEGRATION.md) | TBD |
+| Raspberry Pi 5 (onboard compute) | 1 | [`omnibot_pi.launch.py`](omnibot-ros2/omnibot_bringup/launch/master/omnibot_pi.launch.py) | TBD |
+| SO-101 arm (Feetech STS3215 servos) | 1 | [`omnibot-ros2/omnibot_arm/config/arm_params.yaml`](omnibot-ros2/omnibot_arm/config/arm_params.yaml), [meshes](omnibot-ros2/omnibot_description/meshes/so101/) | TBD |
+| Orbbec Astra Pro RGB-D camera | 1 | [sensor guide](omnibot-ros2/omnibot_navigation/docs/SENSOR_INTEGRATION.md) | TBD |
+| Wrist camera | 1 | [`perception.launch.py`](omnibot-ros2/omnibot_bringup/launch/perception.launch.py) | TBD |
+| Xbox controller (teleop) | 1 | [`robot_with_joy.launch.py`](omnibot-ros2/omnibot_bringup/launch/robot_with_joy.launch.py) | TBD |
+| Meta Quest 3 / 3S (optional VR teleop) | 0–1 | [`omnibot-vr/`](omnibot-vr/) | TBD |
+| Desktop PC with NVIDIA GPU (optional, VLA/RL) | 0–1 | [`omnibot-ai-ros2/omnibot_vla/README.md`](omnibot-ai-ros2/omnibot_vla/README.md) | TBD |
+| Battery, wiring, mounts | — | Not documented yet | TBD |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Inputs
+    T["Xbox / keyboard teleop<br/>/cmd_vel/teleop"]
+    A[Android app & Quest VR<br/>via rosbridge]
+    N[Nav2 / SLAM]
+    V[VLA policy_node]
+    R[RL policy]
+  end
+  CM["/control_mode<br/>teleop · nav2 · vla · rl_nav"]
+  ES["/emergency_stop"]
+  T --> BM[cmd_vel_mux]
+  A --> BM
+  N --> BM
+  V --> BM
+  R --> BM
+  V --> AM[arm_cmd_mux]
+  A --> AM
+  CM --> BM
+  CM --> AM
+  ES --> BM
+  ES --> AM
+  BM --> YB[Yahboom base driver<br/>mecanum wheels, encoders, IMU]
+  AM --> AD[arm_driver_node<br/>SO-101, limits + e-stop latch]
+  YB --> O["/odom, /imu/data"]
+  CAM[Astra Pro + wrist camera] --> LR[LeRobot recorder<br/>datasets → training]
+  AD --> LR
+```
+
+Details: control-mode gating in [docs/reference.md](docs/reference.md#bring-up-control-mode), arm and policy safety in [docs/safety.md](docs/safety.md).
+
+## Roadmap
+
+- [ ] Nav2 + slam_toolbox in Gazebo with named waypoints (in review: [#18](https://github.com/ohho-robotics/OmniBot/pull/18))
+- [ ] Hardware build guide and priced BOM ([#19](https://github.com/ohho-robotics/OmniBot/issues/19))
+- [ ] MuJoCo backend for `mujoco.launch.py` ([#24](https://github.com/ohho-robotics/OmniBot/issues/24)); Isaac backend after that
+- [ ] SO-100 arm support ([#26](https://github.com/ohho-robotics/OmniBot/issues/26))
+- [ ] WebRTC video for the Quest client (MJPEG today)
+- [ ] First tagged release, v0.1.0
+
+## Contributing & community
+
+New here? Pick a [**good first issue**](https://github.com/ohho-robotics/OmniBot/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) or a [**help wanted**](https://github.com/ohho-robotics/OmniBot/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) issue. Questions, build photos and ideas go in [**Discussions**](https://github.com/ohho-robotics/OmniBot/discussions). Contribution guidelines and the code of conduct live in the [org `.github` repo](https://github.com/ohho-robotics/.github).
+
+Demos and updates: [YouTube](https://www.youtube.com/@varun.vaidhiya/videos) · [X @varunvaidhiya](https://x.com/varunvaidhiya).
 
 ## Layout
 
@@ -238,3 +235,5 @@ pip install -r omnibot-ai-engines/rl_engine/requirements.txt
 ## License
 
 [Apache-2.0](LICENSE) for OhhO code in this repository. Vendored Meta XR SDK and CoplayDev unity-mcp packages keep their own licences. See [NOTICE](NOTICE).
+
+⭐ **Star the repo** to follow progress.
