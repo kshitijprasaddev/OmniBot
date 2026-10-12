@@ -29,4 +29,5 @@ packages = [
     "agent_engine.reasoners",
     "agent_engine.memory",
     "agent_engine.integrations",
+    "agent_engine.navigation",
 ]

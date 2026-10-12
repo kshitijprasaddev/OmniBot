@@ -38,12 +38,30 @@ class TestWorldStateVerifier(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("safety", reason)
 
-    def test_passthrough_when_no_actuation(self):
+    def test_navigate_kitchen_allowed(self):
         ok, _, reason = self.v.verify(
             "navigate_to", {"location": "kitchen"}, make_world()
         )
         self.assertTrue(ok)
-        self.assertIn("passthrough", reason)
+        self.assertIn("navigation goal ok", reason)
+
+    def test_navigate_unknown_location_blocked(self):
+        ok, _, reason = self.v.verify(
+            "navigate_to", {"location": "mars"}, make_world()
+        )
+        self.assertFalse(ok)
+        self.assertIn("unknown location", reason)
+
+    def test_navigate_outside_map_blocked(self):
+        outside = {"outside": (99.0, 99.0, 0.0)}
+        v = WorldStateVerifier(named_locations=outside)
+        ok, _, reason = v.verify(
+            "navigate_to",
+            {"location": "outside"},
+            make_world(extra={"map_bounds": v.map_bounds}),
+        )
+        self.assertFalse(ok)
+        self.assertIn("outside map", reason)
 
     def test_action_mapper_shapes(self):
         self.assertEqual(default_action_mapper("drive", {"vx": 0.1}).shape, (3,))

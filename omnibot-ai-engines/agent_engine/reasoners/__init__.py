@@ -8,5 +8,11 @@ from __future__ import annotations
 
 from .claude_tool_caller import ClaudeToolCallingReasoner
 from .scripted import ScriptedReasoner
+from .scripted_brain import ScriptedBrain, parse_navigation_location
 
-__all__ = ["ScriptedReasoner", "ClaudeToolCallingReasoner"]
+__all__ = [
+    "ScriptedReasoner",
+    "ScriptedBrain",
+    "parse_navigation_location",
+    "ClaudeToolCallingReasoner",
+]

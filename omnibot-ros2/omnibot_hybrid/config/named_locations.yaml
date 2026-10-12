@@ -1,56 +1,34 @@
-# Named Locations — OmniBot Hybrid Mission Planner
-#
-# Each entry maps a human-readable name to a pose in the 'map' frame.
-#   x, y  — position in metres
-#   yaw   — heading in radians  (0 = positive X axis, π/2 = positive Y axis)
-#
-# How to capture a real location after SLAM mapping:
-#   1. Drive the robot to the desired location with joystick / teleop.
-#   2. Run:  ros2 topic echo /amcl_pose --once
-#   3. Copy the x, y, and yaw (derived from quaternion) into this file.
-#
-# Mission planner command examples:
-#   "navigate:kitchen,vla:find the red cup"
-#   "navigate:bedroom,vla:pick up the pillow"
-#   "navigate:hallway"          (navigation only)
-#   "vla:follow the person"     (VLA only — no navigation)
-#
-# ── Replace the coordinates below with real values from your SLAM map ────────
+# Named locations for mission_planner (map frame).
+# kitchen / desk / door match omnibot_navigation/config/waypoints.yaml (OHH-30 sim).
 
 locations:
-
-  # Origin / charging dock
   home:
     x: 0.0
     y: 0.0
-    yaw: 0.0        # facing positive X
-
-  # Kitchen area (change to real SLAM coordinates)
-  kitchen:
-    x: 3.5
-    y: 1.2
-    yaw: 1.5708     # π/2 — facing positive Y
-
-  # Bedroom / living area
-  bedroom:
-    x: -2.0
-    y: 4.0
-    yaw: 3.1416     # π — facing negative X
-
-  # Hallway / corridor
-  hallway:
-    x: 1.0
-    y: 0.5
     yaw: 0.0
 
-  # Desk / workspace
-  workspace:
-    x: 2.0
-    y: -1.5
-    yaw: -1.5708    # -π/2 — facing negative Y
+  kitchen:
+    x: -1.9
+    y: 0.7
+    yaw: 3.141592653589793
 
-  # Doorway between rooms
+  desk:
+    x: 2.55
+    y: -0.45
+    yaw: 1.5707963267948966
+
+  door:
+    x: -0.3
+    y: -1.45
+    yaw: -1.5707963267948966
+
+  # Legacy aliases (real-robot SLAM captures may still use these names)
+  workspace:
+    x: 2.55
+    y: -0.45
+    yaw: 1.5707963267948966
+
   doorway:
-    x: 0.5
-    y: 2.0
-    yaw: 1.5708
+    x: -0.3
+    y: -1.45
+    yaw: -1.5707963267948966

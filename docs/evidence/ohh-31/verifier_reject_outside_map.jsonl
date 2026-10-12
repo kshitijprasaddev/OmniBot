@@ -1,0 +1,4 @@
+{"ts":1791799799.6244721,"goal_id":"f766ad20304e","step":"perceive","detail":"perceived world state"}
+{"ts":1791799799.6274717,"goal_id":"f766ad20304e","step":"reason","detail":"planned","calls":["navigate_to"],"goal_complete":false,"give_up":false}
+{"ts":1791799799.6274717,"goal_id":"f766ad20304e","step":"verify","detail":"plan rejected","approved":0,"blocked":["navigate_to: navigation: goal (99.00, 99.00) outside map envelope"]}
+{"ts":1791799799.6274717,"goal_id":"f766ad20304e","step":"reflect","detail":"reflection success=False","success":false,"summary":"1 failure(s); budget_hit=False."}

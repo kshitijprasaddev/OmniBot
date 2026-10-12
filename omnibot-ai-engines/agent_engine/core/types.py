@@ -95,6 +95,7 @@ class HarnessPhase(str, Enum):
     IDLE = "idle"
     PERCEIVE = "perceive"
     PLAN = "plan"
+    VERIFY = "verify"
     ACT = "act"
     MONITOR = "monitor"
     REFLECT = "reflect"

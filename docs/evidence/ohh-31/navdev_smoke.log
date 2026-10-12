@@ -1,0 +1,15 @@
+# navdev container smoke (2026-10-12)
+
+```
+docker exec navdev bash -c 'source /opt/ros/jazzy/setup.bash && pip install --break-system-packages -q -e /ws/stage/learning_engine -e /ws/stage/agent_engine numpy && python3 -m unittest discover -s /ws/stage/agent_engine/tests -t /ws/stage -q'
+```
+
+Result: `Ran 60 tests in 0.053s — OK`
+
+```
+docker exec navdev bash -c 'source /opt/ros/jazzy/setup.bash && source /ws/install/setup.bash && python3 -m pytest -q /ws/src/omnibot_hybrid/test/test_cmd_vel_mux.py'
+```
+
+Result: `16 passed in 0.43s` (includes `TestTeleopPreemptsAutonomy`).
+
+Full Gazebo kitchen navigation was not run in navdev (workspace lacks omnibot_orchestration / sim stack); use CI sim-smoke + `agent_nav2.launch.py` on a complete Jazzy workspace.

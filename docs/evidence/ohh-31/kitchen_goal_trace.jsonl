@@ -1,0 +1,7 @@
+{"ts":1791799799.4557962,"goal_id":"73b8953f6bbb","step":"perceive","detail":"perceived world state"}
+{"ts":1791799799.4567955,"goal_id":"73b8953f6bbb","step":"reason","detail":"scripted: go to kitchen","calls":["navigate_to"],"goal_complete":false,"give_up":false}
+{"ts":1791799799.4567955,"goal_id":"73b8953f6bbb","step":"verify","detail":"plan verified","approved":1,"blocked":[]}
+{"ts":1791799799.4567955,"goal_id":"73b8953f6bbb","step":"act","detail":"executed 1 call(s)","tools":["navigate_to"]}
+{"ts":1791799799.4567955,"goal_id":"73b8953f6bbb","step":"perceive","detail":"perceived world state"}
+{"ts":1791799799.6244721,"goal_id":"73b8953f6bbb","step":"reason","detail":"scripted: navigation dispatched","calls":[],"goal_complete":true,"give_up":false}
+{"ts":1791799799.6244721,"goal_id":"73b8953f6bbb","step":"reflect","detail":"reflection success=True","success":true,"summary":"Completed without tool failures."}
