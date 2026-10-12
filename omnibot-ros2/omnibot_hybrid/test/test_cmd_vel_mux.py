@@ -149,6 +149,28 @@ class TestStopWithinOneCycle:
         mux_node._out_pub.publish.assert_called_once()
 
 
+class TestTeleopPreemptsAutonomy:
+    """Teleop via the mux must win over Nav2 / VLA while in teleop mode."""
+
+    def test_nav2_ignored_while_teleop_active(self, mux_node):
+        mux_node._active_mode = "teleop"
+        mux_node._nav2_cb(_make_twist(0.8))
+        mux_node._out_pub.publish.assert_not_called()
+        mux_node._teleop_cb(_make_twist(0.15))
+        mux_node._out_pub.publish.assert_called_once()
+
+    def test_switching_to_teleop_stops_autonomous_feed(self, mux_node):
+        _set_mode(mux_node, "nav2")
+        mux_node._nav2_cb(_make_twist(0.5))
+        mux_node._out_pub.publish.assert_called_once()
+        mux_node._out_pub.reset_mock()
+        _set_mode(mux_node, "teleop")
+        mux_node._nav2_cb(_make_twist(0.5))
+        mux_node._out_pub.publish.assert_called_once()  # zero cmd only
+        zero = mux_node._out_pub.publish.call_args[0][0]
+        assert zero.linear.x == pytest.approx(0.0)
+
+
 class TestActiveModePublisher:
     def test_active_mode_published(self, mux_node):
         mux_node._active_mode = "vla"

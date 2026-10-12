@@ -1,0 +1,14 @@
+{
+  "kitchen_mission_command": "navigate:kitchen (tool log: ['navigate_to:kitchen'])",
+  "kitchen_trace": "kitchen_goal_trace.jsonl",
+  "reject_trace": "verifier_reject_outside_map.jsonl",
+  "kitchen_steps": [
+    "perceive",
+    "reason",
+    "verify",
+    "act",
+    "perceive",
+    "reason",
+    "reflect"
+  ]
+}

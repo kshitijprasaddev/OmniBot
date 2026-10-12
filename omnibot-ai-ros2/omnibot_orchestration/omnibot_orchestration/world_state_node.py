@@ -22,6 +22,7 @@ from sensor_msgs.msg import JointState
 from std_msgs.msg import Bool, String
 
 from agent_engine.core.blackboard import DetectedObject, WorldState
+from agent_engine.navigation.waypoints import APARTMENT_MAP_BOUNDS
 
 ARM_JOINT_NAMES = [
     "arm_shoulder_pan",
@@ -43,6 +44,7 @@ class WorldStateNode(Node):
         self.declare_parameter("publish_hz", 5.0)
         self.declare_parameter("entity_memory_path", "~/.omnibot/entity_memory.json")
         self.declare_parameter("scene_description", "")
+        self.declare_parameter("environment", "real")
 
         self._pose = (0.0, 0.0, 0.0)
         self._vel = (0.0, 0.0, 0.0)
@@ -110,6 +112,9 @@ class WorldStateNode(Node):
 
     # -- publish -----------------------------------------------------------
     def _publish(self) -> None:
+        extra = {}
+        if str(self.get_parameter("environment").value) == "sim":
+            extra["map_bounds"] = dict(APARTMENT_MAP_BOUNDS)
         ws = WorldState(
             base_pose=self._pose,
             base_velocity=self._vel,
@@ -120,6 +125,7 @@ class WorldStateNode(Node):
             scene_description=str(self.get_parameter("scene_description").value),
             memory_summary=self._entity.get_summary() if self._entity else "",
             emergency_stop=self._estop,
+            extra=extra,
         )
         self._pub.publish(String(data=json.dumps(ws.to_dict())))
 

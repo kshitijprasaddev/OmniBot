@@ -68,6 +68,10 @@ jobs:
             --dependency-types=buildtool_export \
             --dependency-types=exec \
             --dependency-types=test
+          python3 -m pip install --break-system-packages \
+            -e omnibot-ai-engines/learning_engine \
+            -e omnibot-ai-engines/agent_engine \
+            numpy
           colcon build --symlink-install --base-paths src
           source install/setup.bash
           colcon test --base-paths src --event-handlers console_direct+ --return-code-on-test-failure

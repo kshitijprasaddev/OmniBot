@@ -16,6 +16,7 @@ environment (the pure-Python harness core), like the other *_engine packages.
 """
 
 import json
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -26,10 +27,12 @@ from std_msgs.msg import Bool, String
 
 from agent_engine.core.blackboard import WorldState
 from agent_engine.core.harness import AgentHarness
+from agent_engine.core.loop_trace import LoopTraceRecorder
 from agent_engine.core.tools import ToolParam, ToolRegistry, ToolSpec
 from agent_engine.core.types import ToolResult
 from agent_engine.memory.working_memory import WorkingMemory
 from agent_engine.reasoners.claude_tool_caller import ClaudeToolCallingReasoner
+from agent_engine.reasoners.scripted_brain import ScriptedBrain
 from agent_engine.reasoning.factory import build_reasoning_router
 
 
@@ -43,8 +46,16 @@ class AgentNode(Node):
         self.declare_parameter("replay_dataset_path", "~/datasets/agent_episodes")
         self.declare_parameter("entity_memory_path", "~/.omnibot/entity_memory.json")
         self.declare_parameter("environment", "real")
+        self.declare_parameter("use_scripted_brain", True)
+        self.declare_parameter("loop_trace_path", "~/.omnibot/agent_loop_trace.jsonl")
 
         self._latest_world = WorldState()
+        trace_path = str(self.get_parameter("loop_trace_path").value)
+        self._pub_trace = self.create_publisher(String, "/agent/loop_trace", 10)
+        self._trace = LoopTraceRecorder(
+            path=trace_path,
+            on_event=lambda line: self._pub_trace.publish(String(data=line)),
+        )
 
         # Publishers (the agent's actuators, via mission_planner + muxes).
         self._pub_mission = self.create_publisher(String, "/mission/command", 10)
@@ -115,10 +126,7 @@ class AgentNode(Node):
     # -- harness assembly --------------------------------------------------
     def _build_harness(self) -> AgentHarness:
         tools = self._build_tools()
-        api_key = str(self.get_parameter("anthropic_api_key").value)
-        prefer_local = bool(self.get_parameter("prefer_local_reasoning").value)
-        router = build_reasoning_router(api_key=api_key, prefer_local=prefer_local)
-        reasoner = ClaudeToolCallingReasoner(router, tools)
+        reasoner = self._build_reasoner(tools)
 
         memory = self._build_memory()
         reflector, verifier = self._build_learning_adapters()
@@ -132,7 +140,24 @@ class AgentNode(Node):
             verifier=verifier,
             max_steps_per_goal=int(self.get_parameter("max_steps_per_goal").value),
             logger=lambda m: self.get_logger().info(m),
+            trace=self._trace,
         )
+
+    def _build_reasoner(self, tools: ToolRegistry):
+        api_key = (
+            str(self.get_parameter("anthropic_api_key").value)
+            or os.environ.get("ANTHROPIC_API_KEY", "")
+        ).strip()
+        use_scripted = bool(self.get_parameter("use_scripted_brain").value)
+        if use_scripted or not api_key:
+            self.get_logger().info(
+                "agent_node using ScriptedBrain (offline NL → navigate_to)"
+            )
+            return ScriptedBrain()
+        prefer_local = bool(self.get_parameter("prefer_local_reasoning").value)
+        router = build_reasoning_router(api_key=api_key, prefer_local=prefer_local)
+        self.get_logger().info("agent_node using ClaudeToolCallingReasoner")
+        return ClaudeToolCallingReasoner(router, tools)
 
     def _build_tools(self) -> ToolRegistry:
         reg = ToolRegistry()

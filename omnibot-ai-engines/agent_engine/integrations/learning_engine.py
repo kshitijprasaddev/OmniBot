@@ -24,6 +24,7 @@ import numpy as np
 
 from ..core.blackboard import WorldState
 from ..core.types import Goal, Reflection, ToolResult
+from ..navigation.waypoints import APARTMENT_MAP_BOUNDS, SIM_NAMED_LOCATIONS, goal_in_map
 
 ActionMapper = Callable[[str, Dict[str, Any]], Optional[np.ndarray]]
 
@@ -60,6 +61,8 @@ class WorldStateVerifier:
         checks: Optional[Sequence[Any]] = None,
         horizon: int = 10,
         action_mapper: ActionMapper = default_action_mapper,
+        named_locations: Optional[Dict[str, Tuple[float, float, float]]] = None,
+        map_bounds: Optional[Dict[str, Any]] = None,
     ) -> None:
         if checks is None:
             from learning_engine.verification.verifier import (
@@ -71,10 +74,14 @@ class WorldStateVerifier:
         self.checks = list(checks)
         self.horizon = horizon
         self._map = action_mapper
+        self.named_locations = named_locations or dict(SIM_NAMED_LOCATIONS)
+        self.map_bounds = map_bounds or dict(APARTMENT_MAP_BOUNDS)
 
     def verify(
         self, tool: str, args: Dict[str, Any], world: WorldState
     ) -> Tuple[bool, Dict[str, Any], str]:
+        if tool == "navigate_to":
+            return self._verify_navigate_to(args, world)
         action = self._map(tool, args)
         if action is None:
             return True, args, "no direct actuation — passthrough"
@@ -93,6 +100,27 @@ class WorldStateVerifier:
             if getattr(check, "hard", False) and score <= 0.0:
                 return False, args, f"{check.name}: {reason}"
         return True, args, "ok"
+
+    def _verify_navigate_to(
+        self, args: Dict[str, Any], world: WorldState
+    ) -> Tuple[bool, Dict[str, Any], str]:
+        loc = str(args.get("location", "")).lower().strip()
+        if loc not in self.named_locations:
+            return False, args, f"navigation: unknown location '{loc}'"
+        gx, gy, _yaw = self.named_locations[loc]
+        bounds = world.extra.get("map_bounds") or self.map_bounds
+        if bounds and not goal_in_map(gx, gy, bounds):
+            return (
+                False,
+                args,
+                f"navigation: goal ({gx:.2f}, {gy:.2f}) outside map envelope",
+            )
+        speed = args.get("speed", args.get("vx"))
+        if speed is not None:
+            ok, _, reason = self.verify("drive", {"vx": float(speed)}, world)
+            if not ok:
+                return False, args, f"navigation: {reason}"
+        return True, args, "navigation goal ok"
 
 
 class EvaluatorReflector:

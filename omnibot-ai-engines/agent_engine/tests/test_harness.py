@@ -60,6 +60,7 @@ class TestHarnessLoop(unittest.TestCase):
                 HarnessPhase.IDLE,
                 HarnessPhase.PERCEIVE,
                 HarnessPhase.PLAN,
+                HarnessPhase.VERIFY,
                 HarnessPhase.ACT,
                 HarnessPhase.MONITOR,
                 HarnessPhase.PERCEIVE,
@@ -114,10 +115,9 @@ class TestHarnessLoop(unittest.TestCase):
         reports = harness.run_until_idle()
         self.assertNotIn("drive:0.1", log)  # never actuated
         self.assertIn("drive", verifier.seen)
-        # The blocked result is recorded in the act report.
-        act = next(r for r in reports if r.phase is HarnessPhase.ACT)
-        self.assertFalse(act.tool_results[0].ok)
-        self.assertIn("safety gate", act.tool_results[0].output)
+        verify = next(r for r in reports if r.phase is HarnessPhase.VERIFY)
+        self.assertIn("rejected", verify.detail)
+        self.assertNotIn(HarnessPhase.ACT, [r.phase for r in reports])
 
     def test_low_level_action_allowed_by_verifier(self):
         plans = [Plan(calls=[ToolCall("drive", {"vx": 0.1})]), Plan(goal_complete=True)]

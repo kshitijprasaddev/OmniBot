@@ -36,6 +36,7 @@ from .interfaces import (
     VerifierPort,
 )
 from .tools import ToolRegistry
+from .loop_trace import LoopTraceRecorder
 from .types import (
     Goal,
     GoalStatus,
@@ -64,6 +65,7 @@ class AgentHarness:
         verifier: Optional[VerifierPort] = None,
         max_steps_per_goal: int = 12,
         logger: Optional[Logger] = None,
+        trace: Optional[LoopTraceRecorder] = None,
     ) -> None:
         self.perceptor = perceptor
         self.reasoner = reasoner
@@ -73,12 +75,14 @@ class AgentHarness:
         self.verifier = verifier
         self.max_steps_per_goal = max_steps_per_goal
         self._log = logger or (lambda _m: None)
+        self._trace = trace
 
         self.phase: HarnessPhase = HarnessPhase.IDLE
         self.current_goal: Optional[Goal] = None
         self.world: Optional[WorldState] = None
         self._queue: Deque[Goal] = deque()
         self._plan: Optional[Plan] = None
+        self._approved_calls: List[ToolCall] = []
         self._history: List[ToolResult] = []
         self._step = 0
         self._estop = False
@@ -132,6 +136,7 @@ class AgentHarness:
             HarnessPhase.IDLE: self._tick_idle,
             HarnessPhase.PERCEIVE: self._tick_perceive,
             HarnessPhase.PLAN: self._tick_plan,
+            HarnessPhase.VERIFY: self._tick_verify,
             HarnessPhase.ACT: self._tick_act,
             HarnessPhase.MONITOR: self._tick_monitor,
             HarnessPhase.REFLECT: self._tick_reflect,
@@ -174,6 +179,7 @@ class AgentHarness:
         self.current_goal.status = GoalStatus.ACTIVE
         self._history = []
         self._plan = None
+        self._approved_calls = []
         self._step = 0
         self.last_reflection = None
         self._log(f"starting goal {self.current_goal.id}: {self.current_goal.text!r}")
@@ -181,6 +187,7 @@ class AgentHarness:
 
     def _tick_perceive(self):
         self.world = self.perceptor.perceive()
+        self._trace_step("perceive", "perceived world state")
         if self.world.emergency_stop:
             self._estop = True
             self._abort_current("emergency stop in world state")
@@ -198,6 +205,13 @@ class AgentHarness:
             self.current_goal, self.world, context, tuple(self._history)
         )
         self._plan = plan
+        self._trace_step(
+            "reason",
+            plan.rationale or "planned",
+            calls=[c.tool for c in plan.calls],
+            goal_complete=plan.goal_complete,
+            give_up=plan.give_up,
+        )
 
         if plan.ask_human:
             if "ask_human" in self.tools:
@@ -207,14 +221,46 @@ class AgentHarness:
             return HarnessPhase.REFLECT, "reasoner: goal complete", []
         if plan.give_up:
             return HarnessPhase.REFLECT, "reasoner: give up", []
+        if plan.calls:
+            return HarnessPhase.VERIFY, plan.rationale or "verify plan", []
         return HarnessPhase.ACT, plan.rationale or "execute plan", []
+
+    def _tick_verify(self):
+        assert self._plan is not None
+        approved: List[ToolCall] = []
+        blocked: List[str] = []
+        for call in self._plan.calls:
+            if self.verifier is not None:
+                allowed, _, reason = self.verifier.verify(
+                    call.tool, dict(call.args), self.world or WorldState()
+                )
+            else:
+                allowed, reason = True, "no verifier configured"
+            if allowed:
+                approved.append(call)
+            else:
+                blocked.append(f"{call.tool}: {reason}")
+                self._log(f"verifier blocked {call.tool}: {reason}")
+        self._approved_calls = approved
+        self._trace_step(
+            "verify",
+            "plan verified" if approved else "plan rejected",
+            approved=len(approved),
+            blocked=blocked,
+        )
+        if not approved:
+            self._history = [
+                ToolResult(False, f"blocked by safety gate: {b}") for b in blocked
+            ]
+            return HarnessPhase.REFLECT, "plan rejected by verifier", []
+        return HarnessPhase.ACT, f"verified {len(approved)} call(s)", []
 
     def _tick_act(self):
         results: List[ToolResult] = []
-        plan = self._plan
-        if plan is not None:
-            for call in plan.calls:
-                results.append(self._dispatch_guarded(call))
+        calls = self._approved_calls or (self._plan.calls if self._plan else [])
+        for call in calls:
+            results.append(self._dispatch_guarded(call))
+        self._trace_step("act", f"executed {len(results)} call(s)", tools=[c.tool for c in calls])
         self._history.extend(results)
         self._step += 1
         return HarnessPhase.MONITOR, f"executed {len(results)} call(s)", results
@@ -234,6 +280,12 @@ class AgentHarness:
         else:
             refl = self._heuristic_reflection()
         self.last_reflection = refl
+        self._trace_step(
+            "reflect",
+            f"reflection success={refl.success}",
+            success=refl.success,
+            summary=refl.summary,
+        )
         self.current_goal.status = (
             GoalStatus.SUCCEEDED if refl.success else GoalStatus.FAILED
         )
@@ -269,6 +321,10 @@ class AgentHarness:
             call = ToolCall(call.tool, safe_args)
         return self.tools.dispatch(call)
 
+    def _trace_step(self, step: str, detail: str, **extra: object) -> None:
+        if self._trace is not None:
+            self._trace.record(step, self.current_goal, detail, **extra)
+
     def _heuristic_reflection(self) -> Reflection:
         plan = self._plan
         if plan is not None and plan.give_up:
@@ -294,6 +350,7 @@ class AgentHarness:
     def _end_goal(self) -> None:
         self.current_goal = None
         self._plan = None
+        self._approved_calls = []
         self._history = []
         self._step = 0
 
