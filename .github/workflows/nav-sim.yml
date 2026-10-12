@@ -1,0 +1,108 @@
+name: nav-sim
+
+# OHH-30 / thin slice toward OHH-62: three headless Gazebo Nav2 scenarios
+# (reach kitchen, desk, door from the spawn pose). Simulation only; nothing here
+# touches a robot. Nightly runs each scenario 5 times in a row.
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      repeat:
+        description: "Runs per scenario (nightly uses 5)"
+        required: false
+        default: "1"
+  pull_request:
+    paths:
+      - "omnibot-ros2/omnibot_navigation/**"
+      - "omnibot-ros2/omnibot_bringup/**"
+      - "omnibot-ros2/omnibot_description/**"
+      - ".github/workflows/nav-sim.yml"
+
+concurrency:
+  group: nav-sim-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nav-sim:
+    name: nav-sim (kitchen, desk, door)
+    runs-on: ubuntu-24.04
+    container: ros:jazzy-ros-base-noble
+    timeout-minutes: 90
+    env:
+      LIBGL_ALWAYS_SOFTWARE: "1"
+      GALLIUM_DRIVER: llvmpipe
+      QT_QPA_PLATFORM: offscreen
+      MESA_GL_VERSION_OVERRIDE: "3.3"
+      REPEAT: ${{ github.event_name == 'schedule' && '5' || github.event.inputs.repeat || '1' }}
+    steps:
+      - name: Install git and sudo
+        run: apt-get update && apt-get install -y git sudo ca-certificates
+      - uses: actions/checkout@v4
+      - name: Install Gazebo Harmonic, Nav2, slam_toolbox, and software rendering
+        shell: bash
+        run: |
+          set -eo pipefail
+          sudo apt-get update
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+            python3-colcon-common-extensions \
+            python3-rosdep \
+            python3-pytest \
+            libgl1-mesa-dri \
+            libegl1 \
+            libegl-mesa0 \
+            libglx-mesa0 \
+            libglu1-mesa \
+            xvfb
+          sudo rosdep init || true
+          rosdep update
+          source /opt/ros/jazzy/setup.bash
+          # The 3-D mapping stack (RTAB-Map, OctoMap) is not used in this sim.
+          rosdep install \
+            --from-paths src/omnibot_description src/omnibot_arm src/omnibot_bringup src/omnibot_navigation \
+            --ignore-src -y --rosdistro jazzy \
+            --skip-keys "rtabmap_ros octomap_server pcl_ros octomap_msgs"
+      - name: Build
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/jazzy/setup.bash
+          colcon build --symlink-install --base-paths src \
+            --packages-select omnibot_description omnibot_arm omnibot_bringup omnibot_navigation
+      - name: ROS-free checks (waypoints, Nav2 params, saved map)
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          colcon test --base-paths src --packages-select omnibot_navigation \
+            --event-handlers console_direct+ --return-code-on-test-failure
+          colcon test-result --verbose
+      - name: Gazebo Nav2 scenarios (kitchen, desk, door; ${{ env.REPEAT }}x each)
+        shell: bash
+        run: |
+          set -eo pipefail
+          source /opt/ros/jazzy/setup.bash
+          source install/setup.bash
+          mkdir -p nav-sim-out
+          # Each run starts a fresh sim at the spawn pose and must reach the
+          # waypoint within 60 s of sim time. Non-zero exit if any run fails.
+          set +e
+          bash omnibot-ros2/omnibot_navigation/scripts/run_nav_scenarios.sh \
+            --repeat "${REPEAT}" --results nav-sim-out/nav-results.jsonl \
+            kitchen desk door 2>&1 | tee nav-sim-out/summary.txt
+          status=${PIPESTATUS[0]}
+          {
+            echo "### Nav2 in Gazebo: time to goal (sim s), ${REPEAT}x per scenario"
+            echo
+            python3 omnibot-ros2/omnibot_navigation/scripts/summarize_nav_results.py \
+              nav-sim-out/nav-results.jsonl || true
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "${status}"
+      - name: Upload results and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nav-sim-results
+          path: nav-sim-out/
+          if-no-files-found: warn

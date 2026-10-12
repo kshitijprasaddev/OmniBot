@@ -5,3 +5,11 @@
 omnibot-vr/Packages/com.coplaydev.unity-mcp/** linguist-vendored
 omnibot-vr/Packages/com.meta.xr.sdk.core/** linguist-vendored
 omnibot-vr/Packages/com.meta.xr.sdk.interaction/** linguist-vendored
+
+# Shell scripts must keep LF so they run on Linux when checked out on Windows.
+*.sh text eol=lf
+
+# Saved slam_toolbox map: byte-exact, no diffs.
+omnibot-ros2/omnibot_navigation/maps/*.pgm binary
+omnibot-ros2/omnibot_navigation/maps/*.posegraph binary linguist-generated
+omnibot-ros2/omnibot_navigation/maps/*.data binary linguist-generated

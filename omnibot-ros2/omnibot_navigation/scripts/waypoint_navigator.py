@@ -3,149 +3,97 @@
 import rclpy
 from rclpy.node import Node
 from geometry_msgs.msg import PoseStamped
-from nav2_msgs.action import NavigateToPose
 from nav2_msgs.action import NavigateThroughPoses
 from rclpy.action import ActionClient
-import yaml
-import os
-from ament_index_python.packages import get_package_share_directory
+
+from waypoint_loader import load_waypoint_file, resolve_waypoint_path, select_route
 
 
 class WaypointNavigator(Node):
     """
     Autonomous waypoint navigation for OmniBot.
 
-    This node provides autonomous navigation capabilities by following
-    predefined waypoints or accepting waypoint commands.
+    Loads the named waypoints from config/waypoints.yaml (map frame) and sends
+    them to Nav2 as one NavigateThroughPoses goal. `route` is a comma-separated
+    list that picks and orders waypoints by name, e.g. "kitchen,desk,door".
+    An empty route visits every waypoint in file order.
     """
 
     def __init__(self):
         super().__init__("waypoint_navigator")
 
-        # Declare parameters
         self.declare_parameter("waypoint_file", "waypoints.yaml")
+        self.declare_parameter("route", "")
         self.declare_parameter("loop_waypoints", False)
         self.declare_parameter("waypoint_timeout", 30.0)
 
-        # Get parameters
         self.waypoint_file = self.get_parameter("waypoint_file").value
+        self.route = [
+            name.strip()
+            for name in str(self.get_parameter("route").value).split(",")
+            if name.strip()
+        ]
         self.loop_waypoints = self.get_parameter("loop_waypoints").value
         self.waypoint_timeout = self.get_parameter("waypoint_timeout").value
 
-        # Action clients
-        self.navigate_to_pose_client = ActionClient(
-            self, NavigateToPose, "navigate_to_pose"
-        )
         self.navigate_through_poses_client = ActionClient(
             self, NavigateThroughPoses, "navigate_through_poses"
         )
 
-        # State variables
         self.waypoints = []
-        self.current_waypoint_index = 0
         self.is_navigating = False
+        self.has_run = False
 
-        # Load waypoints
         self.load_waypoints()
 
-        # Create timer for autonomous navigation
         self.navigation_timer = self.create_timer(1.0, self.navigation_loop)
 
         self.get_logger().info("Waypoint Navigator initialized")
-        self.get_logger().info(f"Loaded {len(self.waypoints)} waypoints")
+        self.get_logger().info(
+            "Route: " + " -> ".join(w.name for w in self.waypoints)
+            if self.waypoints
+            else "No waypoints loaded"
+        )
 
     def load_waypoints(self):
-        """Load waypoints from YAML file."""
+        """Load the named waypoints from YAML."""
+        path = resolve_waypoint_path(self.waypoint_file)
         try:
-            package_dir = get_package_share_directory("omnibot_navigation")
-            waypoint_path = os.path.join(package_dir, "config", self.waypoint_file)
-
-            if os.path.exists(waypoint_path):
-                with open(waypoint_path, "r") as file:
-                    data = yaml.safe_load(file)
-                    self.waypoints = data.get("waypoints", [])
-                    self.get_logger().info(f"Loaded waypoints from {waypoint_path}")
-            else:
-                # Create default waypoints if file doesn't exist
-                self.create_default_waypoints()
-                self.save_waypoints()
-
-        except Exception as e:
-            self.get_logger().error(f"Error loading waypoints: {str(e)}")
-            self.create_default_waypoints()
-
-    def create_default_waypoints(self):
-        """Create default waypoints for testing."""
-        self.waypoints = [
-            {
-                "name": "start",
-                "position": {"x": 0.0, "y": 0.0, "z": 0.0},
-                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            },
-            {
-                "name": "waypoint_1",
-                "position": {"x": 1.0, "y": 0.0, "z": 0.0},
-                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            },
-            {
-                "name": "waypoint_2",
-                "position": {"x": 1.0, "y": 1.0, "z": 0.0},
-                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            },
-            {
-                "name": "waypoint_3",
-                "position": {"x": 0.0, "y": 1.0, "z": 0.0},
-                "orientation": {"x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0},
-            },
-        ]
-        self.get_logger().info("Created default waypoints")
-
-    def save_waypoints(self):
-        """Save waypoints to YAML file."""
-        try:
-            package_dir = get_package_share_directory("omnibot_navigation")
-            waypoint_path = os.path.join(package_dir, "config", self.waypoint_file)
-
-            data = {"waypoints": self.waypoints}
-            with open(waypoint_path, "w") as file:
-                yaml.dump(data, file, default_flow_style=False)
-
-        except Exception as e:
-            self.get_logger().error(f"Error saving waypoints: {str(e)}")
+            _, by_name = load_waypoint_file(path)
+            self.waypoints = select_route(by_name, self.route)
+            self.get_logger().info(f"Loaded {len(self.waypoints)} waypoints from {path}")
+        except (OSError, ValueError, KeyError) as error:
+            self.get_logger().error(f"Error loading waypoints from {path}: {error}")
+            self.waypoints = []
 
     def navigation_loop(self):
-        """Main navigation loop for autonomous operation."""
-        if not self.is_navigating and len(self.waypoints) > 0:
-            self.start_autonomous_navigation()
+        """Start (or, with loop_waypoints, restart) navigation when idle."""
+        if self.is_navigating or not self.waypoints:
+            return
+        if self.has_run and not self.loop_waypoints:
+            self.navigation_timer.cancel()
+            return
+        self.start_autonomous_navigation()
 
     def start_autonomous_navigation(self):
         """Start autonomous navigation through waypoints."""
-        if len(self.waypoints) == 0:
-            self.get_logger().warn("No waypoints available for navigation")
-            return
-
         self.get_logger().info("Starting autonomous navigation")
         self.is_navigating = True
 
-        # Create goal poses
         goal_poses = []
         for waypoint in self.waypoints:
             pose = PoseStamped()
-            pose.header.frame_id = "map"
+            pose.header.frame_id = waypoint.frame_id
             pose.header.stamp = self.get_clock().now().to_msg()
-
-            pose.pose.position.x = waypoint["position"]["x"]
-            pose.pose.position.y = waypoint["position"]["y"]
-            pose.pose.position.z = waypoint["position"]["z"]
-
-            pose.pose.orientation.x = waypoint["orientation"]["x"]
-            pose.pose.orientation.y = waypoint["orientation"]["y"]
-            pose.pose.orientation.z = waypoint["orientation"]["z"]
-            pose.pose.orientation.w = waypoint["orientation"]["w"]
-
+            pose.pose.position.x = waypoint.x
+            pose.pose.position.y = waypoint.y
+            pose.pose.position.z = waypoint.z
+            pose.pose.orientation.x = waypoint.qx
+            pose.pose.orientation.y = waypoint.qy
+            pose.pose.orientation.z = waypoint.qz
+            pose.pose.orientation.w = waypoint.qw
             goal_poses.append(pose)
 
-        # Send navigation goal
         self.send_navigation_goal(goal_poses)
 
     def send_navigation_goal(self, poses):
@@ -155,13 +103,11 @@ class WaypointNavigator(Node):
 
         self.get_logger().info(f"Sending navigation goal with {len(poses)} poses")
 
-        # Wait for action server
         if not self.navigate_through_poses_client.wait_for_server(timeout_sec=5.0):
             self.get_logger().error("NavigateThroughPoses action server not available")
             self.is_navigating = False
             return
 
-        # Send goal
         self.send_goal_future = self.navigate_through_poses_client.send_goal_async(
             goal_msg, feedback_callback=self.feedback_callback
         )
@@ -183,36 +129,19 @@ class WaypointNavigator(Node):
         """Handle navigation feedback."""
         feedback = feedback_msg.feedback
         self.get_logger().info(
-            f"Navigation feedback: {feedback.current_pose.pose.position.x:.2f}, {feedback.current_pose.pose.position.y:.2f}"
+            f"Navigation feedback: {feedback.current_pose.pose.position.x:.2f}, "
+            f"{feedback.current_pose.pose.position.y:.2f}"
         )
 
     def get_result_callback(self, future):
         """Handle navigation result."""
-        future.result().result
+        future.result()
         self.get_logger().info("Navigation completed")
         self.is_navigating = False
+        self.has_run = True
 
         if self.loop_waypoints:
             self.get_logger().info("Looping waypoints - restarting navigation")
-            self.create_timer(2.0, self.start_autonomous_navigation)
-
-    def add_waypoint(self, name, x, y, z=0.0, qx=0.0, qy=0.0, qz=0.0, qw=1.0):
-        """Add a new waypoint."""
-        waypoint = {
-            "name": name,
-            "position": {"x": x, "y": y, "z": z},
-            "orientation": {"x": qx, "y": qy, "z": qz, "w": qw},
-        }
-        self.waypoints.append(waypoint)
-        self.save_waypoints()
-        self.get_logger().info(f"Added waypoint: {name}")
-
-    def clear_waypoints(self):
-        """Clear all waypoints."""
-        self.waypoints = []
-        self.current_waypoint_index = 0
-        self.save_waypoints()
-        self.get_logger().info("Cleared all waypoints")
 
 
 def main(args=None):

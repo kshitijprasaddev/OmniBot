@@ -86,6 +86,64 @@ ros2 launch omnibot_arm arm.launch.py
 ros2 launch omnibot_lerobot teleop_record.launch.py
 ```
 
+## Nav2 + slam_toolbox in Gazebo (OHH-30)
+
+Simulation only. The apartment world from `sim.launch.py` is mapped with `slam_toolbox`, the saved map is checked in, and Nav2 (DWB) drives the holonomic base to the named waypoints `kitchen`, `desk`, and `door`. Nothing here was run on the real robot.
+
+| Piece | Where |
+|---|---|
+| Mapping launch (`slam_toolbox`, headless Gazebo, scripted sweep) | [`sim_mapping.launch.py`](omnibot-ros2/omnibot_navigation/launch/sim_mapping.launch.py), [`sim_map_sweep.py`](omnibot-ros2/omnibot_navigation/scripts/sim_map_sweep.py) |
+| Saved map and how to regenerate it | [`maps/`](omnibot-ros2/omnibot_navigation/maps/) (`apartment.yaml`, `apartment.pgm`, `apartment.posegraph`, `apartment.data`), [`maps/README.md`](omnibot-ros2/omnibot_navigation/maps/README.md), [`generate_sim_map.sh`](omnibot-ros2/omnibot_navigation/scripts/generate_sim_map.sh) |
+| Named waypoints, map frame | [`config/waypoints.yaml`](omnibot-ros2/omnibot_navigation/config/waypoints.yaml), read by [`go_to_waypoint.py`](omnibot-ros2/omnibot_navigation/scripts/go_to_waypoint.py), [`waypoint_navigator.py`](omnibot-ros2/omnibot_navigation/scripts/waypoint_navigator.py), and the scenario test |
+| Nav2 on the saved map | [`sim_navigation.launch.py`](omnibot-ros2/omnibot_navigation/launch/sim_navigation.launch.py), [`config/nav2_params.yaml`](omnibot-ros2/omnibot_navigation/config/nav2_params.yaml) |
+| Integration test (kitchen within 60 s from the start pose; desk and door the same way) | [`test_nav_sim_scenarios.py`](omnibot-ros2/omnibot_navigation/test/test_nav_sim_scenarios.py), [`run_nav_scenarios.sh`](omnibot-ros2/omnibot_navigation/scripts/run_nav_scenarios.sh) |
+| CI: 3 scenarios, nightly and `workflow_dispatch` | [`.github/workflows/nav-sim.yml`](.github/workflows/nav-sim.yml) |
+
+The launch files and the scenario runner need ROS 2 Jazzy and Gazebo Harmonic, so docs-test skips them.
+
+<!-- docs-test: skip ros -->
+```bash
+source /opt/ros/jazzy/setup.bash
+source install/setup.bash
+# Map the apartment with slam_toolbox (drives a fixed sweep, saves into maps/)
+omnibot-ros2/omnibot_navigation/scripts/generate_sim_map.sh
+# Nav2 on the saved map, then send the robot to a named waypoint
+ros2 launch omnibot_navigation sim_navigation.launch.py
+ros2 run omnibot_navigation go_to_waypoint.py kitchen
+# The CI scenarios: a fresh sim per run, non-zero exit if any run fails
+omnibot-ros2/omnibot_navigation/scripts/run_nav_scenarios.sh kitchen desk door
+```
+
+<p align="center">
+  <img src="omnibot-ros2/omnibot_navigation/docs/apartment_map_waypoints.png" width="480" alt="Saved apartment map with the start pose (yellow), kitchen (red), desk (blue), and door (green)"/>
+</p>
+
+The saved map with the start pose (yellow), `kitchen` (red), `desk` (blue), and `door` (green), drawn by [`render_map_overlay.py`](omnibot-ros2/omnibot_navigation/scripts/render_map_overlay.py). Grey is unknown space (inside the furniture and outside the walls).
+
+### Time to goal
+
+Each run starts a fresh headless Gazebo sim with the robot at the spawn pose (0, 0, yaw 0). Time is Gazebo simulation time from goal acceptance to Nav2 `SUCCEEDED`, with a 60 s limit. A run passes only if Nav2 succeeds in time **and** the final ground-truth pose (`/odom`, exact in the planar sim) is within 0.30 m and 0.50 rad of the waypoint. Nav2's own goal checker is tighter: 0.15 m and 0.20 rad.
+
+| Scenario | Goal (map frame) | Runs | Passed | Time to goal, min / median / max (s) |
+|---|---|---|---|---|
+| `kitchen` | x -1.90, y 0.70, yaw 180 deg | 5 | 5 | 15.7 / 17.0 / 17.5 |
+| `desk` | x 2.55, y -0.45, yaw 90 deg | 5 | 5 | 18.8 / 20.0 / 21.6 |
+| `door` | x -0.30, y -1.45, yaw -90 deg | 5 | 5 | 8.2 / 12.8 / 13.4 |
+
+Where these numbers come from: the 15 runs in [`nav_sim_runs_local.jsonl`](omnibot-ros2/omnibot_navigation/docs/nav_sim_runs_local.jsonl) and [`nav_sim_runs_local_log.txt`](omnibot-ros2/omnibot_navigation/docs/nav_sim_runs_local_log.txt), made with `run_nav_scenarios.sh --repeat 5 kitchen desk door` in a `ros:jazzy-ros-base-noble` Docker container (Mesa software rendering, 16 CPUs, real-time factor 1.0 in every run). They are local runs, not a GitHub Actions run. The [`nav-sim`](.github/workflows/nav-sim.yml) workflow produces the same table for each CI run in its job summary and artifacts; its nightly schedule runs each scenario 5 times in a row. Times on a CI runner may differ.
+
+### Nav2 tuning for the mecanum base
+
+Changes to [`nav2_params.yaml`](omnibot-ros2/omnibot_navigation/config/nav2_params.yaml), each of which the file now comments:
+
+- DWB stays. The base is holonomic and DWB samples `vx`, `vy`, and `vtheta` (`vy_samples: 10`, `min_vel_y` -0.20, `max_vel_y` 0.20). `min_y_velocity_threshold` was 0.5, above `max_vel_y`, so the controller zeroed every lateral command. It is now 0.001. [`test_nav_assets.py`](omnibot-ros2/omnibot_navigation/test/test_nav_assets.py) fails if it goes back above `max_vel_y`.
+- MPPI was not needed: 15 of 15 runs reached their goal in under 23 s with DWB once the lateral threshold above was fixed, so MPPI was not tried.
+- Footprint is the 0.30 x 0.28 m rectangle around the 0.265 x 0.250 m chassis instead of a 0.22 m circle.
+- Velocity caps stay at 0.20 m/s and 1.0 rad/s, the Yahboom driver clamp, so sim and robot limits match.
+- Fixes needed to start on Jazzy at all: `nav2_amcl::OmniMotionModel` (the old class name does not exist), `nav2_navfn_planner::NavfnPlanner` (old `/` name not found), no `plugin_lib_names` list (it re-registers built-in BT nodes and crashes `bt_navigator`), a `behavior_server` section, and `slam_toolbox` launched as a lifecycle node (it stayed `unconfigured` before) with `map_file_name: ""` (the old `omnibot_map` made it fail to load a pose graph at start).
+
+Not covered: `drive:=mecanum` (wheel-physics) with Nav2 was tried once and the `map` frame never appeared before Nav2's startup timeout, so `sim_navigation.launch.py` uses the planar holonomic drive only. The 3-D RTAB-Map stack, real-robot SLAM/Nav2, and bags are untouched.
+
 GPU policy stacks (OpenVLA / SmolVLA, Isaac Lab RL) need a desktop NVIDIA GPU, not the Raspberry Pi:
 
 <!-- docs-test: skip gpu -->
